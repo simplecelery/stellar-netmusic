@@ -17,6 +17,7 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
         urllib3.disable_warnings()
         self.keyword = ''
         self.medias = []
+        self.actPlayItem = 0
         self.allmovidesdata = {}
         self.mediaclass = []
         self.pageindex = 1
@@ -30,7 +31,9 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
         self.lastpg = ''
         self.pg = ''
         self.spy = []
-    
+        self.stoptimes = 0
+        self.listflag = hasattr(self.player, 'addToPlaylist')
+        
     def start(self):
         super().start()
 
@@ -210,18 +213,61 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
             {'type':'link','name':'title','@click':'onMainMenuClick'}
         ]
 
-        mediagrid_layout = [
-            [
-                {
-                    'group': [
-                        {'type':'link','name':'name','textColor':'#ff7f00','fontSize':15,'height':0.15, '@click':'on_name_click'},
-                        {'type':'image','name':'pic', '@click':'on_grid_click'},
-                        {'type':'link','name':'singer','textColor':'#ff002f','fontSize':15,'height':0.15, '@click':'on_singer_click'}
-                    ],
-                    'dir':'vertical'
-                }
+        mediagrid_layout = []
+        if self.listflag:
+            mediagrid_layout = [
+                [
+                    {
+                        'group': [
+                            {'type':'link','name':'name','textColor':'#A52A2A','fontSize':15,'height':0.1, '@click':'on_name_click'},
+                            {'type':'image','name':'pic', '@click':'on_grid_click'},
+                            {'type':'link','name':'singer','textColor':'#800000','fontSize':15,'height':0.1, '@click':'on_singer_click'},
+                            {
+                                'group': [
+                                    {'type':'link','name':'播放','textColor':'#3CB371','fontSize':15, '@click':'on_play_click'},
+                                    {'type':'space','width':80},
+                                    {'type':'link','name':'收藏','textColor':'#008000','fontSize':15, '@click':'on_listsave_click'}
+                                ],
+                                'height':25
+                            }
+                        ],
+                        'dir':'vertical'
+                    }
+                ]
             ]
-        ]
+        else:
+            mediagrid_layout = [
+                [
+                    {
+                        'group': [
+                            {'type':'link','name':'name','textColor':'#ff7f00','fontSize':15,'height':0.1, '@click':'on_name_click'},
+                            {'type':'image','name':'pic', '@click':'on_grid_click'},
+                            {'type':'link','name':'singer','textColor':'#ff002f','fontSize':15,'height':0.1, '@click':'on_singer_click'}
+                        ],
+                        'dir':'vertical'
+                    }
+                ]
+            ]
+        if self.listflag:
+            pagecontrols = [
+                                {'type':'label','name':'cur_page',':value':'cur_page'},
+                                {'type':'link','name':'首页','@click':'onClickFirstPage'},
+                                {'type':'link','name':'上一页','@click':'onClickFormerPage'},
+                                {'type':'link','name':'下一页','@click':'onClickNextPage'},
+                                {'type':'link','name':'末页','@click':'onClickLastPage'},
+                                {'type':'label','name':'max_page',':value':'max_page'},
+                                {'type':'space','width':50},
+                                {'type':'link','name':'收藏本页','@click':'onSaveThisPage'},
+                            ]
+        else:
+            pagecontrols = [
+                                {'type':'label','name':'cur_page',':value':'cur_page'},
+                                {'type':'link','name':'首页','@click':'onClickFirstPage'},
+                                {'type':'link','name':'上一页','@click':'onClickFormerPage'},
+                                {'type':'link','name':'下一页','@click':'onClickNextPage'},
+                                {'type':'link','name':'末页','@click':'onClickLastPage'},
+                                {'type':'label','name':'max_page',':value':'max_page'},
+                        ]
         controls = [
             {'type':'space','height':5},
             {
@@ -236,19 +282,11 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
             {'type':'space','height':10},
             {'type':'grid','name':'zygrid','itemlayout':zywz_layout,'value':xl,'itemheight':30,'itemwidth':80,'height':50},
             {'type':'space','height':5},
-            {'type':'grid','name':'mediagrid','itemlayout':mediagrid_layout,'value':self.medias,'separator':True,'itemheight':300,'itemwidth':150},
+            {'type':'grid','name':'mediagrid','itemlayout':mediagrid_layout,'value':self.medias,'separator':True,'itemheight':250,'itemwidth':150},
             {'group':
                 [
                     {'type':'space'},
-                    {'group':
-                        [
-                            {'type':'label','name':'cur_page',':value':'cur_page'},
-                            {'type':'link','name':'首页','@click':'onClickFirstPage'},
-                            {'type':'link','name':'上一页','@click':'onClickFormerPage'},
-                            {'type':'link','name':'下一页','@click':'onClickNextPage'},
-                            {'type':'link','name':'末页','@click':'onClickLastPage'},
-                            {'type':'label','name':'max_page',':value':'max_page'},
-                        ]
+                    {'group':pagecontrols
                         ,'width':0.7
                     },
                     {'type':'space'}
@@ -279,6 +317,23 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
             self.player.play(url, caption=playname)
         except:
             self.player.play(url)
+        self.actPlayItem = item
+        
+    def on_play_click(self, page, listControl, item, itemControl):
+        url = self.medias[item]['songurl']
+        playname = self.medias[item]['name']
+        items = [
+            {'name': playname, 'url': url}
+        ]
+        self.player.addToPlaylist("在线音乐", items,0)
+    
+    def on_listsave_click(self, page, listControl, item, itemControl):
+        url = self.medias[item]['songurl']
+        playname = self.medias[item]['name']
+        items = [
+            {'name': playname, 'url': url}
+        ]
+        self.player.addToPlaylist("在线音乐", items,-1)
         
     def on_name_click(self, page, listControl, item, itemControl):
         name = self.medias[item]['name']
@@ -355,14 +410,13 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
         self.loaddatas()
         self.loading(True)
                 
-    def on_movieurl_click(self, page, listControl, item, itemControl):
-        if len(self.allmovidesdata[page]['actmovies']) > item:
-            playurl = self.allmovidesdata[page]['actmovies'][item]['url']
-            playname = page + ' ' + self.allmovidesdata[page]['actmovies'][item]['title']
-            try:
-                self.player.play(playurl, caption=playname)
-            except:
-                self.player.play(playurl)   
+    def onSaveThisPage(self, *args):
+        items = []
+        for item in self.medias:
+            items.append({'name': item['name'] + '(' + item['singer'] +")", 'url': item['songurl']})
+        if len(items) > 0:
+            self.player.addToPlaylist("在线音乐", items,-1)
+            
             
     def playMovieUrl(self,playpageurl):
         return
@@ -370,7 +424,7 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
     def loading(self, stopLoading = False):
         if hasattr(self.player,'loadingAnimation'):
             self.player.loadingAnimation('main', stop=stopLoading)
-        
+
 def newPlugin(player:StellarPlayer.IStellarPlayer,*arg):
     plugin = netmusicplugin(player)
     return plugin
