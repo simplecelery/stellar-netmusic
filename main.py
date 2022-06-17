@@ -36,13 +36,112 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
         
     def start(self):
         super().start()
+        
+        
+    def QianQiansearch(self,key,page=0):
+        results = {}
+        results['allnum'] = 0
+        results['song'] = []
+        headers={'referer':'http://music.163.com/',
+            'proxy':"false",
+            'user-agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1'}
+        data={'s':'',
+            'type':1,
+            'offset':1,
+            'limit':20}
+        
+        neteaseurl = 'http://music.163.com/api/cloudsearch/pc'
+        data['offset'] = page
+        data['s'] = key
+        req = requests.post(neteaseurl,headers=headers,data=data,timeout=1)
+        if req.status_code != 200:
+            return request
+        d = json.loads(req.text)
+        song_url = ['http://music.163.com/song/media/outer/url?id=','.mp3']
+        results['allnum'] = d["result"]["songCount"]
+        songs = d["result"]['songs']
+        for i in songs:
+            songinfo = {}
+            songinfo['songurl'] = str(i['id']).join(song_url)
+            songinfo['name'] = i["name"]
+            songinfo['singer'] = i['ar'][0]["name"]
+            songinfo['pic'] = i['al']['picUrl']
+            songinfo['lrc'] = self.getQianQianLrc(i['id'])
+            songinfo['lrctype'] = 'text'
+            results['song'].append(songinfo)
+        return results
+        
+    def getQianQianLrc(self,song_id):
+        headers = {
+            "user-agent" : "Mozilla/5.0",
+            "Referer" : "http://music.163.com",
+            "Host" : "music.163.com"
+        }
+        if not isinstance(song_id, str):
+            song_id = str(song_id)
+        url = f"http://music.163.com/api/song/lyric?id={song_id}+&lv=1&tv=-1"
+        r = requests.get(url, headers=headers)
+        if r.status_code != 200:
+            return ""
+        r.encoding = r.apparent_encoding
+        json_obj = json.loads(r.text)
+        return json_obj["lrc"]["lyric"]
 
+    def getQQLrc(self,songmid):
+        headers={'user-agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
+                'referer' : 'https://m.y.qq.com'}
+        url='https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric.fcg?songmid={}&format=json&nobase64=1&songtype=0&callback=c'.format(songmid)
+        try:
+            html = requests.get(url,headers=headers)
+            d = json.loads(html.text[2:-1])['lyric']
+            return d
+        except:
+            return ""
+    
+    def getQQSongUrl(self,songid):
+        url_part = "https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=%7B%22req_0%22%3A%7B%22module%22%3A%22vkey.GetVkeyServer%22%2C%22method%22%3A%22CgiGetVkey%22%2C%22param%22%3A%7B%22guid%22%3A%22358840384%22%2C%22songmid%22%3A%5B%22{}%22%5D%2C%22songtype%22%3A%5B0%5D%2C%22uin%22%3A%221443481947%22%2C%22loginflag%22%3A1%2C%22platform%22%3A%2220%22%7D%7D%2C%22comm%22%3A%7B%22uin%22%3A%2218585073516%22%2C%22format%22%3A%22json%22%2C%22ct%22%3A24%2C%22cv%22%3A0%7D%7D".format(songid)
+        music_document_html_json = requests.get(url_part).text
+        music_document_html_dict = json.loads(music_document_html_json)  #将文件从json格式转化为字典格式
+        music_url_part = music_document_html_dict["req_0"]["data"]["midurlinfo"][0]["purl"]
+        if music_url_part != '':
+            return music_document_html_dict['req_0']['data']['sip'][0]+music_url_part
+        else:
+            return ""
 
+    
+    def qqSearch(self,key,pageindex):
+        results = {}
+        results['allnum'] = 0
+        results['song'] = []
+        headers={'user-agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1',
+            'referer' : 'https://m.y.qq.com'}
+
+        self.url='https://c.y.qq.com/soso/fcgi-bin/client_search_cp?p='+str(self.pageindex)+'&n=20&w='+key
+        resp = requests.get(self.url, headers=headers)
+        json_str = resp.text
+        json_str = json_str[9:-1]
+        json_dict = json.loads(json_str)
+        music_list = json_dict["data"]["song"]["list"]
+        for music in music_list:
+            songinfo = {}
+            songurl = self.getQQSongUrl(music["songmid"])
+            if songurl != "":
+                songinfo['name'] = music["songname"]
+                songinfo['singer'] = music["singer"][0]["name_hilight"]
+                songinfo['songurl'] = songurl
+                songinfo['lrc'] = self.getQQLrc(music["songmid"])
+                songinfo['lrctype'] = 'text'
+                songinfo['pic'] = 'https://y.gtimg.cn/music/photo_new/T002R300x300M000' + music["albummid"]+ '.jpg'
+                results['song'].append(songinfo)
+        results['allnum'] = json_dict["data"]["song"]["totalnum"]
+        return results
+            
+    
     def miguSearch(self,key,pageindex):
         results = {}
         results['allnum'] = 0
         results['song'] = []
-        search_url = 'http://pd.musicapp.migu.cn/MIGUM2.0/v1.0/content/search_all.do'
+        search_url = 'http://pd.musicapp.migu.cn/MIGUM3.0/v1.0/content/search_all.do'
         params = {
             'ua': "Android_migu",
             "version": "5.0.1",
@@ -64,7 +163,8 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
             return results
 
         if jsonData['info'] != '成功':
-            print(jsonData)
+            return results
+        if not ('songResultData' in jsonData):
             return results
         songdata = jsonData['songResultData']
         results['allnum'] = int(songdata['totalCount'])
@@ -208,7 +308,7 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
         self.doModal('main',800,700,'',controls)        
     
     def makeLayout(self):
-        xl = [{'title':'线路1'},{'title':'线路2'}]
+        xl = [{'title':'线路1'},{'title':'线路2'},{'title':'线路3'},{'title':'线路4'}]
         zywz_layout = [
             {'type':'link','name':'title','@click':'onMainMenuClick'}
         ]
@@ -329,7 +429,7 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
     
     def on_listsave_click(self, page, listControl, item, itemControl):
         url = self.medias[item]['songurl']
-        playname = self.medias[item]['name']
+        playname = self.medias[item]['name'].strip() + '(' + self.medias[item]['singer'].strip() +")"
         items = [
             {'name': playname, 'url': url}
         ]
@@ -361,6 +461,10 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
             searchres = self.miguSearch(self.keyword,self.pageindex)
         if self.apitype == 1:
             searchres = self.kugouSearch(self.keyword,self.pageindex)
+        if self.apitype == 2:
+            searchres = self.qqSearch(self.keyword,self.pageindex)
+        if self.apitype == 3:
+            searchres = self.QianQiansearch(self.keyword,self.pageindex)
         allsongnum = searchres['allnum']
         self.pagenumbers = allsongnum // 20
         if self.pagenumbers * 20 < allsongnum:
@@ -413,7 +517,8 @@ class netmusicplugin(StellarPlayer.IStellarPlayerPlugin):
     def onSaveThisPage(self, *args):
         items = []
         for item in self.medias:
-            items.append({'name': item['name'] + '(' + item['singer'] +")", 'url': item['songurl']})
+            addtitle = item['name'].strip() + '(' + item['singer'].strip() +")"
+            items.append({'name': addtitle, 'url': item['songurl']})
         if len(items) > 0:
             self.player.addToPlaylist("在线音乐", items,-1)
             
